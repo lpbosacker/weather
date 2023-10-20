@@ -7,6 +7,7 @@ import play.api.libs.functional.syntax._
 import Prefs._
 import java.time.Instant
 import StrUtil.stripUrl
+import java.sql.PreparedStatement
 
 case class Observation(
     stationId: String
@@ -29,8 +30,11 @@ case class Observation(
 )
 
 object Observation {
-
   def degCToF(degC: Float) : Float = ( 9.0 / 5.0 * degC + 32.0 ).toFloat
+  def degCToF(degC: Option[Float]) : Float =
+    if (degC.isDefined) degCToF(degC.get)
+    else 0.0
+
   val convDtStr = DateTimeUtil.strToInstant _
   // ----------------------------------------------------------------------------------------
   implicit val observationReads: Reads[Observation] = (
@@ -94,12 +98,60 @@ object Observation {
     }
   }
   // ----------------------------------------------------------------------------------------
+  def insertObservations(obs: List[Observation]): Unit = {
+
+    val insertObservationSql = (
+      "INSERT INTO weather.observation " +
+        "( station_id, timestamp, temperature, dew_point" +
+        ", wind_direction, wind_speed, wind_gust, barometric_pressure" +
+        ", sea_level_pressure, max_temp_last_24hr, min_temp_last_24hr" +
+        ", precipitation_last_hr, precipitation_last_3hr" +
+        ", precipitation_last_6hr, relative_humidity" +
+        ", wind_chill, heat_index) " +
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) " +
+        "ON CONFLICT ON CONSTRAINT observation_pk DO NOTHING"
+      ).stripMargin
+
+    // -------------------------------------------------------------------------
+    def addObservation(stmt: java.sql.PreparedStatement, o: Observation): Unit =
+      import java.sql.Types
+      // for Option[String] -> if None then setNull VARCHAR else setString()
+      def setOptionN[T](parameterindex: Int, optN: Option[T]): Unit =
+        optN match {
+          case Some(n) => stmt.setObject(parameterindex, n, Types.NUMERIC)
+          case None => stmt.setNull(parameterindex, Types.NUMERIC)
+        }
+      // -------------------------------------------------------------------------
+      stmt.setString(1, o.stationId)
+      stmt.setTimestamp(2, DateTimeUtil.instantToTimestamp(o.timestamp))
+      stmt.setObject(3, o.temperature, Types.NUMERIC)
+      setOptionN(4, o.dewPoint)
+      setOptionN(5, o.windDirection)
+      setOptionN(6, o.windSpeed)
+      setOptionN(7, o.windGust)
+      setOptionN(8, o.barometricPressure)
+      setOptionN(9, o.seaLevelPressure)
+      setOptionN(10, o.maxTemperatureLast24Hours)
+      setOptionN(11, o.minTemperatureLast24Hours)
+      setOptionN(12, o.precipitationLastHour)
+      setOptionN(13, o.precipitationLast3Hours)
+      setOptionN(14, o.precipitationLast6Hours)
+      setOptionN(15, o.relativeHumidity)
+      setOptionN(16, o.windChill)
+      setOptionN(17, o.heatIndex)
+      stmt.addBatch()
+    // ---------------------------------------------------------------------------
+    DbUtil.insertList(insertObservationSql, addObservation: (PreparedStatement, Observation) => Unit, obs)
+  }
+
   // ----------------------------------------------------------------------------------------
   def printObs(obs: Observation) : Unit = {
-    println(s"---- Station ${obs.stationId} ----")
-    println(s" Temperature : ${degCToF(obs.temperature)}")
-    println(s"  Wind Speed : ${obs.windSpeed.getOrElse(0.0)}")
-    println(s"    Wind Dir : ${obs.windDirection.getOrElse("None")}")
-    println
+    println(s"---- Observation ${obs.stationId} at ${obs.timestamp} ----")
+    println(s"        Temperature : ${degCToF(obs.temperature)}")
+    println(s"          Dew point : ${degCToF(obs.dewPoint)}")
+    println(s"           Wind Dir : ${obs.windDirection.getOrElse("None")} deg")
+    println(s"         Wind Speed : ${obs.windSpeed.getOrElse("-")}")
+    println(s"          Wind Gust : ${obs.windGust.getOrElse("-")}")
+    println(s"Barometric Pressure : ${obs.windGust.getOrElse("-")}")
   }
 }
