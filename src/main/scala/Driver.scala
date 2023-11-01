@@ -15,11 +15,20 @@ object Main {
 
     println("Running!")
 
+    // ---------------------------------------------------------------
+    def someCount[T](optList: List[Option[T]]): Int =
+      optList.foldLeft(0) { (nSome, opt) =>
+        nSome + {
+          if (opt.isDefined) 1 else 0
+        }
+      }
+    // ---------------------------------------------------------------
+
+    /* ============================================================== *
     println("Fetching counties from NWS")
     val counties = County.getNWSCounties
     println(s"Retrieved ${counties.size} counties")
 
-    /* ============================================================== *
     County.insertCounties(counties)
 
     println("Retrieving stations from web api")
@@ -30,31 +39,30 @@ object Main {
     Station.insertStations(stations)
     println(" - stations inserted")
 
-    val carverStationNames = List(
-        "KFCM"
-      , "C9784"
-      , "COOPMPXM5"
-      , "E2706"
-      , "F2164"
-      , "F9274"
-      , "HPN03" // what happened here?  save response to file and parse : No precip last 6 hours
-      , "JDNM5"
-      , "MAYM5"
-      , "MN022"
-      , "MN023"
-      , "TS642"
-    )
-    val stationObs = Observation.getLatestObservations(carverStationNames)
-    val goodCount = stationObs.foldLeft(0){ (ocount, obs) => ocount + { if (obs.isDefined) 1 else 0} }
-    println(s"Found ${goodCount} valid")
-    stationObs.flatten.map(obs => Observation.printObs(obs))
+    val testStationNames = List(
+            "KFCM"
+          , "MAYM5"
+          , "MN022"
+          , "MN023"
+          , "TS642"
+        )
+
+    val mnWhere = """station_id in (
+          select station_id from weather.station join weather.county using (county_id)
+          where state = 'MN' )""".stripMargin
      * ============================================================== */
     /* ============================================================== *
-    // retrieve existing stations from db
-    println("Retrieving stations from database")
-    val dbStations = Station.getDbStations()
-    println(s" - retrieved ${dbStations.size} stations from database")
+      println("Retrieving stations from database")
+      val stations = Station.getDbStations()
+      println(s" - retrieved ${stations.size} stations from database")
+      val stationObs = stations.map(_.station_id).map(Observation.getLatestObservation(_))
+
+      println(s"Found ${someCount(stationObs)} observations from stations ${stationObs.size}")
+      Observation.insertObservations(stationObs.flatten)
      * ============================================================== */
+    val flyingCloud = "KMSP"
+    val fcObs = Observation.getStationObservations(flyingCloud, DateTimeUtil.last24Hours).flatten
+    fcObs.foreach(Observation.printObs)
   }
 }
 

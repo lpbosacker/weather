@@ -2,8 +2,8 @@ package weather
 
 import scala.annotation.tailrec
 import java.sql.{ResultSet, PreparedStatement}
-import requests.*
-import play.api.libs.json.*
+import requests._
+import play.api.libs.json._
 import scala.util.{Failure, Success, Try}
 import play.api.libs.json.Reads._
 import play.api.libs.functional.syntax._

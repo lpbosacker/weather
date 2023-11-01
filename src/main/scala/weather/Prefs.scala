@@ -16,6 +16,6 @@ object Prefs {
   val fetchSize = appConfig.getInt("fetchSize")
   val insertBatchSize = appConfig.getInt("insertBatchSize")
 
-  val dtFormatter : DateTimeFormatter = DateTimeFormatter.ISO_OFFSET_DATE_TIME
+  // given dtFormatter : DateTimeFormatter = DateTimeFormatter.ISO_OFFSET_DATE_TIME
 
 }

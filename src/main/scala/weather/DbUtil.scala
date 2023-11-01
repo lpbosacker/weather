@@ -17,6 +17,8 @@ object DbUtil {
     connection match {
       case Success(c) => 
         c.setAutoCommit(false)
+        // set client/jvm timezone to GMT - all observations are in GMT, maintain in GMT
+        java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("GMT"))
         println(s"Connected to ${cfg.dbname} as user ${cfg.user}")
         c
       case Failure(e) =>

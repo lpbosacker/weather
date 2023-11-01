@@ -7,7 +7,7 @@ import play.api.libs.functional.syntax._
 import Prefs._
 import java.time.Instant
 import StrUtil.stripUrl
-import java.sql.PreparedStatement
+import java.sql.{PreparedStatement, Timestamp}
 
 case class Observation(
     stationId: String
@@ -30,8 +30,10 @@ case class Observation(
 )
 
 object Observation {
-  def degCToF(degC: Float) : Float = ( 9.0 / 5.0 * degC + 32.0 ).toFloat
-  def degCToF(degC: Option[Float]) : Float =
+  def degCToF(degC: Float): Float = (9.0 / 5.0 * degC + 32.0).toFloat
+  def kmToMile(km: Float): Float = (km / 1.60934).toFloat
+
+  def degCToF(degC: Option[Float]): Float =
     if (degC.isDefined) degCToF(degC.get)
     else 0.0
 
@@ -70,14 +72,16 @@ object Observation {
         None
       }
     }
+
   // register implicit conversion function
   given Conversion[JsValue, Option[Observation]] = toObservation(_)
 
   // -------------------------------------------------------------------------
-  def getLatestObservations(stationIds: List[String]) : List[Option[Observation]] =
-    stationIds.map(stationId => getLatestObservation(stationId) )
+  def getLatestObservations(stationIds: List[String]): List[Option[Observation]] =
+    stationIds.map(stationId => getLatestObservation(stationId))
+
   // -------------------------------------------------------------------------
-  def getLatestObservation(stationId: String) : Option[Observation] = {
+  def getLatestObservation(stationId: String): Option[Observation] = {
     val obsUrl = s"${Prefs.stationsUrl}/${stationId}/${Prefs.latestObservationSuffix}"
     try
       val resp = requests.get(obsUrl)
@@ -94,6 +98,29 @@ object Observation {
       case _ => {
         println(s"Other error")
         None
+      }
+    }
+  }
+
+  // ----------------------------------------------------------------------------------------
+  def getStationObservations(stationId: String , interval: TsInterval): List[Option[Observation]] = {
+    val multiObsUrl = s"${Prefs.stationsUrl}/${stationId}/observations?${interval}&limit=50"
+
+    try
+      val resp = requests.get(multiObsUrl)
+      if (resp.statusCode == 200)
+        ((Json.parse(resp.text()) \ "features").as[List[JsValue]]).map(toObservation)
+      else
+        println(s"Failed response status = ${resp.statusCode}")
+        List[Option[Observation]]()
+    catch {
+      case ex: requests.RequestFailedException => {
+        println(s"Http request failed for ${stationId}")
+        List[Option[Observation]]()
+      }
+      case _ => {
+        println(s"Other error")
+        List[Option[Observation]]()
       }
     }
   }
@@ -144,14 +171,25 @@ object Observation {
     DbUtil.insertList(insertObservationSql, addObservation: (PreparedStatement, Observation) => Unit, obs)
   }
 
-  // ----------------------------------------------------------------------------------------
-  def printObs(obs: Observation) : Unit = {
+  // ---------------------------------------------------------------------------------------
+  def printObs(obs: Observation) : Unit =
     println(s"---- Observation ${obs.stationId} at ${obs.timestamp} ----")
     println(s"        Temperature : ${degCToF(obs.temperature)}")
     println(s"          Dew point : ${degCToF(obs.dewPoint)}")
     println(s"           Wind Dir : ${obs.windDirection.getOrElse("None")} deg")
-    println(s"         Wind Speed : ${obs.windSpeed.getOrElse("-")}")
-    println(s"          Wind Gust : ${obs.windGust.getOrElse("-")}")
-    println(s"Barometric Pressure : ${obs.windGust.getOrElse("-")}")
-  }
+    println(s"         Wind Speed : ${
+      obs.windSpeed match {
+        case Some(kmh) => kmToMile(kmh).toString
+        case _ => "-"
+      }
+    } m/hr")
+    // *** wind gust always None : println(s"          Wind Gust : ${obs.windGust.getOrElse("-")} ")
+    println(s"Barometric Pressure : ${
+      obs.barometricPressure match {
+        case Some(pa) => (pa / 100.0).toString
+        case _ => "-"
+      }
+    } mb")
+
+    // ---------------------------------------------------------------------------------------
 }
